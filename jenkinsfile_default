@@ -1,0 +1,63 @@
+pipeline {
+  agent any
+
+  parameters {
+    choice(name: "exec", choices: ['apply', 'destroy'], description: 'infra apply / infra destroy')
+  }
+
+  stages {
+    stage('Credentials') {
+        steps {
+            echo "-----[ Credentials ]-----"
+
+            script {
+                def scmUrl = scm.getUserRemoteConfigs()[0].getUrl()
+                git(url: "${scmUrl}", credentialsId: "${gitCredentials}", branch: 'main')
+
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: "${awsCredentials}", secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                    echo "-----------------------"
+                }
+            }
+        }
+    }
+
+    stage('Provisioning') {
+        steps {
+            echo "-----[ Provisioning ]-----"
+            script {
+                sh "terraform --version"
+            }
+
+            echo "-----------------------"
+        }
+    }
+
+    stage('Build') {
+        steps {
+            echo "-----[ Build ]-----"
+            script {
+                dir("./development/default") {
+                    script {
+                        sh "terraform init"
+                        sh "terraform plan"
+                        sh "terraform ${params.exec} -auto-approve"
+                    }
+                }
+            }
+            echo "-----------------------"
+        }
+    }
+  }
+
+  post {
+      success {
+          echo "----------SUCCESS-------------"
+      }
+      failure {
+          echo "----------FAILURE-------------"
+      }
+      aborted {
+          echo "----------ABORTED-------------"
+      }
+  }
+}
